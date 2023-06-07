@@ -17,10 +17,15 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 
+import javax.jws.WebParam;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
+
+import static org.springframework.data.jpa.domain.AbstractPersistable_.id;
 
 @Controller
 @RequestMapping(value = "/cart")
@@ -37,38 +42,69 @@ public class CartController {
     @Autowired
     CartService cartService;
 
-    @RequestMapping(method = RequestMethod.GET)
-    public String getAllProduct(Model model){
-        List<ProductEntity> list = (List<ProductEntity>) productRepository.findAll();
-        model.addAttribute("product",list);
-        return  "productList";
-    }
+
 
     @RequestMapping(value = "/list")
-    public String listCart(Model model ){
-        //CartDto cart = (CartDto) session.getAttribute("cart");
-        List<CartDto> list = cartService.getAllCart();
-        model.addAttribute("cart",list);
+    public String listCart(Model model , HttpServletRequest request , HttpSession session){
+        List<CartDto> listCart = (List<CartDto>) request.getSession().getAttribute("listCart");
+        if(listCart ==null){
+            listCart = new ArrayList<>();
+        }
+        model.addAttribute("listCart",listCart);
         return "cart";
     }
 
     @RequestMapping(value = "/add/{id}")
-    public String addCart(@PathVariable("id") int id){
-        ProductEntity product = productRepository.findById(id).get();
-        if (product!=null){
-            CartDto cart = new CartDto();
-            cart.setProduct(product);
-            cart.setTotalProduct(1);
-            cartService.addCart(cart);
+    public String addCart(@PathVariable("id") int id, HttpServletRequest request, HttpSession session, Model model){
+        //getlist order tu session
+        List<CartDto> listCart = (List<CartDto>) request.getSession().getAttribute("listCart");
+        if(listCart == null){
+            listCart = new ArrayList<>();
+            request.getSession().getAttribute("listCart");
         }
+        //ADD DOI TUONJG VAO LIST
+        Optional<ProductEntity> product = productRepository.findById(id);
+        ProductEntity productEntity = new ProductEntity();
+        productEntity.setProductId(product.get().getProductId());
+        productEntity.setProductName(product.get().getProductName());
+        productEntity.setProductDescription(product.get().getProductDescription());
+        productEntity.setUnitPrice(product.get().getUnitPrice());
 
-        return "redirect:/cart/list";
+       CartDto cartDto = new CartDto();
+       cartDto.setProduct(productEntity);
+
+        CartDto itemCart = listCart.stream()
+                .filter(p -> id == (p.getProduct().getProductId()))
+                .findAny().orElse(null);
+        if (itemCart != null) {
+            listCart.get(listCart.indexOf(itemCart)).setTotalProduct(itemCart.getTotalProduct() + 1);
+        } else {
+            CartDto newItemCart = new CartDto();
+            newItemCart.setProduct(productEntity);
+            newItemCart.setTotalProduct(1);
+            listCart.add(newItemCart);
+        }
+        request.getSession().setAttribute("listCart",listCart);
+        model.addAttribute("listCart",listCart);
+        return "cart";
+        //return "redirect:/cart/list";
     }
 
-    @RequestMapping(value = "/remove/{id}")
-    public String removeCart(@PathVariable("id") int id){
-        cartService.removeCart(id);
-        return "redirect:/cart/list";
+    @RequestMapping(value = "/remove/{id}", method = RequestMethod.GET)
+    public String removeCart(HttpServletRequest request ,Model model, @PathVariable int id ){
+        List<CartDto> listCart = (List<CartDto>) request.getSession().getAttribute("listCart");
+        if (listCart == null) {
+            listCart = new ArrayList<>();
+            request.getSession().setAttribute("listCart", listCart);
+        }
+        CartDto itemCart = listCart.stream()
+                .filter(p -> id == (p.getProduct().getProductId()))
+                .findAny().orElse(null);
+        listCart.remove(itemCart);
+        request.getSession().setAttribute("listCart", listCart);
+        model.addAttribute("listCart", listCart);
+        //return "redirect:/cart/list";
+        return "cart";
     }
 
 
